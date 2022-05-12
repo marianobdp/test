@@ -1,0 +1,81 @@
+if(api.isSyntaxCheck()) return
+if(api.global.calculateTransactionInfo == false) return		// Make this element just for CQ or SnD types of contracts
+
+if (cProcessor.isPostPhase()) {
+
+
+	getFoldersTotals("ROOT",map)
+}
+
+
+def getFoldersTotals(folderId,columns) {
+
+
+
+	def sumCostElement = api.getElement("SumTotalCost")
+	def ct = cProcessor
+	def h = ct.getHelper()
+	columns.each { it.value.folderScore = 0.00 }
+	def numItems = 0
+	def folder = null
+
+	if (folderId == "ROOT")
+		folder = h.getRoot()
+	else
+		folder = h.findByLineId(folderId)
+
+
+	if (folder == null) return 0
+
+
+	for (line in folder.getChildren()) {
+		columns.each { it.value.lineScore = 0.00 }
+		if (line.isFolder()) {
+			data = getFoldersTotals(line.getLineId(), columns)
+			columns.each {
+				if (it.value.arithmetical) {
+
+					api.trace("it value linescore pre",it.value.lineScore)
+					api.trace("valor header", it.value.headerColumn)
+					api.trace("valor folder", it.value.folderScore)
+					it.value.lineScore = data.find { x -> x.value.headerColumn == it.value.headerColumn }?.value?.folderScore ?: 0
+					api.trace("it value linescore post",it.value.lineScore)
+				}
+			}
+
+		} else {
+			if (line.label.contains("Product Group"))
+			{
+				continue
+			}
+			columns.each {
+				if (it.value.arithmetical) {
+					outputMap = line.getOutputByName(it.value.outputLineName)
+					it.value.lineScore = outputMap?.result
+					api.trace("Outputline",it.value.outputLineName)
+					api.trace("Line",it.value.lineScore)
+				}
+			}
+		}
+		numItems++
+		columns.each {
+			if (it.value.arithmetical) {
+				it.value.folderScore = it.value.folderScore + (it.value.lineScore == null ? 0 : it.value.lineScore)
+			}
+		}
+	}
+
+
+	if (numItems == 0) return 0
+	else {
+		columns.each {
+
+			if (it.value.arithmetical) {
+				api.trace("valor folder final", it.value.folderScore)
+				ct.addOrUpdateOutput(folderId, ["resultName": it.value.headerColumn, "resultLabel": it.value.label, "formatType": "MONEY", "suffix": api.getElement("Currency"), "resultGroup": "Transaction Info,Hidden", "result": it.value.folderScore])
+			}
+
+		}
+		return columns
+	}
+}
